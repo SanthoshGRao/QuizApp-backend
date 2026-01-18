@@ -10,34 +10,34 @@ import studentRoutes from "./routes/student.routes";
 
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "https://santhoshgrao.github.io",
-];
-
+/* ✅ CORS — EXPRESS v5 SAFE */
 app.use(
   cors({
     origin: [
       "http://localhost:5173",
       "http://localhost:5174",
-      "https://santhoshgrao.github.io"
+      "https://santhoshgrao.github.io",
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
   })
 );
 
-/* 🔥 THIS LINE IS MANDATORY */
-app.options("*", cors());
+/* ✅ Explicit preflight handler (NO '*') */
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
+/* BODY */
 app.use(express.json());
 
-/* ✅ INIT DB */
+/* DB */
 initDB();
 
-/* ✅ ROUTES */
+/* ROUTES */
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin", adminStudentsRoutes);
