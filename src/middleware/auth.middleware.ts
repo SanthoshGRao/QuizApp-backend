@@ -17,6 +17,11 @@ export const authenticate = (
   res: Response,
   next: NextFunction
 ) => {
+  // ✅ ALLOW CORS PREFLIGHT
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
