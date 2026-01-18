@@ -10,18 +10,15 @@ import studentRoutes from "./routes/student.routes";
 
 const app = express();
 
-/* ✅ CORS — EXPRESS v5 SAFE */
-app.use(
-  cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://santhoshgrao.github.io",
-    ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://santhoshgrao.github.io"
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 
 /* ✅ Explicit preflight handler (NO '*') */
 app.use((req, res, next) => {
