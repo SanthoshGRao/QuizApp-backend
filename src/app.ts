@@ -18,22 +18,11 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow server-to-server, Render health checks, Postman
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // ⚠️ IMPORTANT: DO NOT THROW ERROR
-      return callback(null, false);
-    },
+    origin: true, // 🔥 allow all origins safely
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
 
 /* ✅ BODY PARSER */
 app.use(express.json());
