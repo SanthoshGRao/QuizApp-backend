@@ -9,6 +9,7 @@ import adminStudentsRoutes from "./routes/admin.students.routes";
 import studentRoutes from "./routes/student.routes";
 
 const app = express();
+console.log("✅ SERVER BOOTING...");
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -16,29 +17,17 @@ const allowedOrigins = [
   "https://santhoshgrao.github.io",
 ];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow server-to-server, Render health checks, Postman
-      if (!origin) return callback(null, true);
+app.use(cors({
+  origin: true,   // allow all origins temporarily
+  credentials: false
+}));
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // ⚠️ IMPORTANT: DO NOT THROW ERROR
-      return callback(null, false);
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-/* ✅ REQUIRED FOR PREFLIGHT */
 app.options("*", cors());
 
 /* ✅ BODY PARSER */
 app.use(express.json());
+
+console.log("✅ ROUTES REGISTERED");
 
 /* ✅ INIT DB */
 initDB();
