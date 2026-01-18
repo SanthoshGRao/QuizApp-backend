@@ -10,23 +10,13 @@ import studentRoutes from "./routes/student.routes";
 
 const app = express();
 
+/* ✅ CORS — FIRST */
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://santhoshgrao.github.io"
-  ],
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  origin: "https://santhoshgrao.github.io",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
-
-
-/* ✅ Explicit preflight handler (NO '*') */
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
-  next();
-});
 
 /* BODY */
 app.use(express.json());
