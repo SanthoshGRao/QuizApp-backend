@@ -19,22 +19,22 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // allow non-browser requests (Postman, Render health checks)
+      // Allow server-to-server, Render health checks, Postman
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      // IMPORTANT: never throw error here
-      return callback(null, true);
+      // ⚠️ IMPORTANT: DO NOT THROW ERROR
+      return callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-/* ✅ MUST handle preflight */
+/* ✅ REQUIRED FOR PREFLIGHT */
 app.options("*", cors());
 
 /* ✅ BODY PARSER */
