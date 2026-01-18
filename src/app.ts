@@ -10,7 +10,6 @@ import studentRoutes from "./routes/student.routes";
 
 const app = express();
 
-/* ✅ CORS FIRST — FIXED */
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -19,15 +18,24 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: "*",
+    origin: (origin, callback) => {
+      // allow non-browser requests (Postman, Render health checks)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // IMPORTANT: never throw error here
+      return callback(null, true);
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-/* ✅ VERY IMPORTANT — handle preflight */
+/* ✅ MUST handle preflight */
 app.options("*", cors());
-
 
 /* ✅ BODY PARSER */
 app.use(express.json());
