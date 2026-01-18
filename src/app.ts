@@ -18,7 +18,8 @@ app.use(cors({
   credentials: true
 }));
 
-/* BODY */
+app.options("*", cors());
+
 app.use(express.json());
 
 /* DB */
