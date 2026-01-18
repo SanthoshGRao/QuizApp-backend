@@ -13,7 +13,6 @@ export const pool = new Pool({
 });
 
 pool.on("connect", () => {
-  console.log("✅ Connected to Supabase PostgreSQL");
 });
 
 pool.on("error", (err) => {

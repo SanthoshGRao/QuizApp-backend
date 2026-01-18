@@ -5,6 +5,9 @@ import { generateToken } from "../utils/jwt";
 import { authenticate, AuthRequest } from "../middleware/auth.middleware";
 import crypto from "crypto";
 import { sendResetEmail } from "../utils/mailer";
+import { allowRoles } from "../middleware/role.middleware";
+import { createLog } from "../utils/logger";
+
 const router = Router();
 
 /**
@@ -131,6 +134,13 @@ router.post("/login", async (req, res) => {
 
     const isMatch = await comparePassword(password, user.password_hash);
     if (!isMatch) {
+      await createLog({
+  action: "LOGIN",
+  actorRole: "UNKNOWN",
+  status: "FAILED",
+  message: `Login failed for ${normalizedEmail}`,
+});
+
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
@@ -139,6 +149,13 @@ router.post("/login", async (req, res) => {
       role: user.role,
     });
 
+    await createLog({
+      action: "LOGIN",
+      actorRole: user.role,
+      actorId: user.id,
+      status: "SUCCESS",
+      message: "User logged in",
+    });
     res.json({
       token,
       user: {
@@ -148,6 +165,7 @@ router.post("/login", async (req, res) => {
         mustChangePassword: user.must_change_password,
       },
     });
+
   } catch (err) {
     console.error("LOGIN ERROR 👉", err);
     res.status(500).json({ message: "Login failed" });
@@ -224,5 +242,24 @@ router.put("/reset-password", authenticate, async (req: AuthRequest, res) => {
     res.status(500).json({ message: "Password reset failed" });
   }
 });
+
+router.get(
+  "/logs",
+  authenticate,
+  allowRoles("ADMIN"),
+  async (req, res) => {
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM system_logs
+      ORDER BY created_at DESC
+      LIMIT 200
+      `
+    );
+
+    res.json(rows);
+  }
+);
+
 
 export default router;

@@ -4,7 +4,7 @@ import { authenticate } from "../middleware/auth.middleware";
 import { allowRoles } from "../middleware/role.middleware";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { hashAnswer } from "../utils/answerHash";
-
+import { createLog } from "../utils/logger";
 
 const router = Router();
 
@@ -50,25 +50,57 @@ router.get(
   authenticate,
   allowRoles("STUDENT"),
   async (req: AuthRequest, res) => {
-    const studentId = req.user!.id;
+    try {
+      const studentId = req.user!.id;
+      // ✅ FORCE public.users
+      const studentRes = await pool.query(
+        `SELECT class FROM public.users WHERE id = $1`,
+        [studentId]
+      );
 
-    const { rows } = await pool.query(
-      `
-      SELECT q.id, q.title
-      FROM quizzes q
-      WHERE q.is_active = true
-      AND q.id NOT IN (
-        SELECT quiz_id FROM results WHERE student_id = $1
-      )
-      ORDER BY q.created_at DESC
-      `,
-      [studentId]
-    );
+      if (studentRes.rowCount === 0) {
+        return res.status(404).json({ message: "Student not found" });
+      }
 
-    res.json(rows);
-  }
+      const studentClass = studentRes.rows[0].class;
+
+     const quizzesRes = await pool.query(
+  `
+  SELECT
+    q.id,
+    q.title,
+    q.publish_at,
+    q.visible_until
+  FROM quizzes q
+  WHERE
+    q.target_class = $1
+    AND q.publish_at <= NOW()
+    AND q.visible_until >= NOW()
+    AND NOT EXISTS (
+      SELECT 1
+      FROM results r
+      WHERE r.quiz_id = q.id
+        AND r.student_id = $2
+    )
+  ORDER BY q.publish_at DESC
+  `,
+  [studentClass, studentId]
 );
 
+      console.log("STUDENT CLASS:", studentClass);
+      console.log("STUDENT ID:", studentId);
+      console.log("QUIZ ROWS:", quizzesRes.rows);
+
+
+      return res.json(quizzesRes.rows);
+    } catch (err) {
+      console.error("STUDENT QUIZZES ERROR:", err);
+      return res.status(500).json({
+        message: "Failed to fetch quizzes",
+      });
+    }
+  }
+);
 
 /**
  * GET QUIZ DETAILS (QUESTIONS OR RESULT)
@@ -141,19 +173,49 @@ router.post(
     }
 
     try {
-      // 1️⃣ Quiz must exist AND be active
+      // 1️⃣ Fetch quiz + publish window
       const quizRes = await pool.query(
-        `SELECT id FROM quizzes WHERE id = $1 AND is_active = true`,
+        `
+        SELECT id, publish_at, visible_until, is_active
+        FROM quizzes
+        WHERE id = $1
+        `,
         [quizId]
       );
 
-      if ((quizRes.rowCount ?? 0) === 0) {
-        return res.status(400).json({
-          message: "Quiz is closed or does not exist"
+      if (quizRes.rowCount === 0) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+
+      const quiz = quizRes.rows[0];
+      const now = new Date();
+
+      // 2️⃣ Active check
+      if (
+        !quiz.publish_at ||
+        !quiz.visible_until ||
+        now < quiz.publish_at ||
+        now > quiz.visible_until
+      ) {
+        return res.status(403).json({
+          message: "Quiz is not available at this time",
         });
       }
 
-      // 2️⃣ Prevent re-submission
+
+      // 3️⃣ Time window enforcement (1 hour)
+      if (
+        !quiz.publish_at ||
+        !quiz.visible_until ||
+        now < quiz.publish_at ||
+        now > quiz.visible_until
+      ) {
+        return res.status(403).json({
+          message: "Quiz is not available at this time",
+        });
+      }
+
+      // 4️⃣ Prevent re-submission
       const existing = await pool.query(
         `SELECT 1 FROM results WHERE student_id = $1 AND quiz_id = $2`,
         [req.user!.id, quizId]
@@ -161,19 +223,20 @@ router.post(
 
       if ((existing.rowCount ?? 0) > 0) {
         return res.status(400).json({
-          message: "You have already submitted this quiz"
+          message: "You have already submitted this quiz",
         });
       }
 
-      // 3️⃣ Evaluate answers
-      // 3️⃣ Evaluate answers + STORE EACH ANSWER
+      // 5️⃣ Evaluate answers
       let score = 0;
 
       for (const ans of answers) {
         const qRes = await pool.query(
-          `SELECT correct_answer_hash
-     FROM questions
-     WHERE id = $1 AND quiz_id = $2`,
+          `
+          SELECT correct_answer_hash
+          FROM questions
+          WHERE id = $1 AND quiz_id = $2
+          `,
           [ans.questionId, quizId]
         );
 
@@ -185,31 +248,42 @@ router.post(
 
         if (isCorrect) score++;
 
-        // ✅ ADD THIS BLOCK (VERY IMPORTANT)
         await pool.query(
           `
-    INSERT INTO student_answers
-      (student_id, question_id, selected_answer_hash, is_correct)
-    VALUES ($1, $2, $3, $4)
-    `,
+          INSERT INTO student_answers
+            (student_id, question_id, selected_answer_hash, is_correct)
+          VALUES ($1, $2, $3, $4)
+          `,
           [
             req.user!.id,
             ans.questionId,
             selectedHash,
-            isCorrect
+            isCorrect,
           ]
         );
       }
 
-
       const total = answers.length;
 
-      // 4️⃣ Save final result (IMMUTABLE)
+      // 6️⃣ Save final result
       await pool.query(
-        `INSERT INTO results (student_id, quiz_id, score, total)
-         VALUES ($1, $2, $3, $4)`,
+        `
+        INSERT INTO results (student_id, quiz_id, score, total)
+        VALUES ($1, $2, $3, $4)
+        `,
         [req.user!.id, quizId, score, total]
       );
+      await createLog({
+  action: "QUIZ_SUBMITTED",
+  actorRole: "STUDENT",
+  actorId: req.user!.id,
+  targetType: "QUIZ",
+  targetId: quizId,
+  status: "SUCCESS",
+  message: "Student submitted quiz",
+  metadata: { score, total },
+});
+
 
       return res.json({ score, total });
     } catch (err) {
@@ -218,6 +292,7 @@ router.post(
     }
   }
 );
+
 /**
  * =========================
  * QUIZ RESULT DETAILS

@@ -5,7 +5,7 @@ import { hashPassword } from "../utils/hash";
 import { authenticate, AuthRequest } from "../middleware/auth.middleware";
 import { allowRoles } from "../middleware/role.middleware";
 import { hashAnswer } from "../utils/answerHash";
-
+import { createLog } from "../utils/logger";
 const router = Router();
 
 /**
@@ -23,17 +23,30 @@ router.post(
     }
 
     try {
-      // ✅ Create quiz as DRAFT
       const result = await pool.query(
-        `
-        INSERT INTO quizzes (title, is_active, created_by)
-        VALUES ($1, false, $2)
-        RETURNING id, title, is_active
-        `,
-        [title, req.user!.id]
-      );
+  `
+  INSERT INTO quizzes (title, is_active, created_by)
+  VALUES ($1, false, $2)
+  RETURNING id, title
+  `,
+  [title, req.user!.id]
+);
 
-      res.status(201).json(result.rows[0]);
+const quizId = result.rows[0].id;
+
+await createLog({
+  action: "QUIZ_CREATED",
+  actorRole: req.user!.role,
+  actorId: req.user!.id,
+  targetType: "QUIZ",
+  targetId: quizId,
+  status: "SUCCESS",
+  message: "Quiz created as draft",
+  metadata: { title },
+});
+
+res.status(201).json(result.rows[0]);
+
     } catch (err) {
       console.error(err);
       res.status(500).json({ message: "Failed to create quiz" });
@@ -107,34 +120,77 @@ router.patch(
   allowRoles("ADMIN"),
   async (req: AuthRequest, res) => {
     const quizId = Number(req.params.quizId);
+    const { targetClass, publishAt } = req.body;
+
+    if (!quizId || !targetClass || !publishAt) {
+      return res.status(400).json({
+        message: "quizId, targetClass and publishAt are required",
+      });
+    }
+
+   const publishTime = new Date(
+  new Date(publishAt).toISOString()
+);
+
+
+    if (isNaN(publishTime.getTime())) {
+      return res.status(400).json({
+        message: "Invalid publishAt datetime",
+      });
+    }
+
+    // quiz visible only for 1 hour
+    const visibleUntil = new Date(
+      publishTime.getTime() + 60 * 60 * 1000
+    );
 
     try {
-      const quiz = await pool.query(
-        "SELECT is_active FROM quizzes WHERE id = $1",
+      const quizRes = await pool.query(
+        `SELECT is_active FROM quizzes WHERE id = $1`,
         [quizId]
       );
 
-      if (quiz.rowCount === 0) {
+      if (quizRes.rowCount === 0) {
         return res.status(404).json({ message: "Quiz not found" });
       }
 
-      if (quiz.rows[0].is_active) {
+      if (quizRes.rows[0].is_active) {
         return res.status(400).json({
-          message: "Quiz is already published and cannot be unpublished"
+          message: "Quiz already published",
         });
       }
 
+      // ⚠️ IMPORTANT:
+      // DO NOT set is_active = true here
       await pool.query(
-        "UPDATE quizzes SET is_active = true WHERE id = $1",
-        [quizId]
+        `
+        UPDATE quizzes
+        SET
+          publish_at = $1,
+          visible_until = $2,
+          target_class = $3,
+          is_active = false
+        WHERE id = $4
+        `,
+        [publishTime, visibleUntil, targetClass, quizId]
       );
+      
 
-      res.json({ message: "Quiz published successfully" });
-    } catch {
-      res.status(500).json({ message: "Failed to publish quiz" });
+      return res.json({
+        message: "Quiz scheduled successfully",
+        publishAt: publishTime,
+        visibleUntil,
+        targetClass,
+      });
+    } catch (err) {
+      console.error("PUBLISH QUIZ ERROR:", err);
+      return res
+        .status(500)
+        .json({ message: "Failed to publish quiz" });
     }
   }
 );
+
 
 /**
  * GET QUESTIONS BY QUIZ
@@ -330,6 +386,16 @@ if (quiz.rows[0]?.is_active) {
         `DELETE FROM quizzes WHERE id = $1`,
         [quizId]
       );
+      await createLog({
+  action: "QUIZ_DELETED",
+  actorRole: req.user!.role,
+  actorId: req.user!.id,
+  targetType: "QUIZ",
+  targetId: quizId,
+  status: "SUCCESS",
+  message: "Quiz deleted",
+});
+
 
       res.json({ message: "Quiz deleted" });
     } catch {
@@ -438,7 +504,6 @@ router.get(
       FROM quizzes q
       ORDER BY q.created_at DESC
     `);
-
     res.json(quizzes.rows);
   }
 );

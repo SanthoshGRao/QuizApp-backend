@@ -10,11 +10,11 @@ import studentRoutes from "./routes/student.routes";
 
 const app = express();
 
-/* ✅ CORS FIRST */
+/* ✅ CORS FIRST — FIXED */
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
-  "https://santhoshgrao.github.io"
+  "https://santhoshgrao.github.io",
 ];
 
 app.use(
@@ -27,8 +27,13 @@ app.use(
       }
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+/* ✅ VERY IMPORTANT — handle preflight */
+app.options("*", cors());
 
 
 /* ✅ BODY PARSER */

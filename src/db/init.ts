@@ -17,12 +17,20 @@ export const initDB = async () => {
     // QUIZ
     await pool.query(`
       CREATE TABLE IF NOT EXISTS quizzes (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(200) NOT NULL,
-        is_active BOOLEAN DEFAULT FALSE,
-        created_by INT REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+
+  -- publishing logic
+  is_active BOOLEAN DEFAULT FALSE,
+  publish_at TIMESTAMP,              -- scheduled publish time
+  visible_until TIMESTAMP,           -- publish_at + 1 hour
+
+  target_class VARCHAR(50),           -- which class can see this quiz
+
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
     `);
 
     // QUESTIONS
@@ -63,7 +71,6 @@ export const initDB = async () => {
       );
     `);
 
-    console.log("✅ Database tables ready");
   } catch (err) {
     console.error("❌ Error creating tables", err);
     process.exit(1);

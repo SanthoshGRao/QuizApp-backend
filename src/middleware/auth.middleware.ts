@@ -1,14 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+import { Multer } from "multer";
 
 export interface AuthRequest extends Request {
   user?: {
     id: number;
     role: "ADMIN" | "STUDENT";
   };
+  file?: Express.Multer.File;
 }
+
+const JWT_SECRET = process.env.JWT_SECRET || "secret";
 
 export const authenticate = (
   req: AuthRequest,
