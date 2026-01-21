@@ -24,28 +24,28 @@ router.post(
 
     try {
       const result = await pool.query(
-  `
+        `
   INSERT INTO quizzes (title, is_active, created_by)
   VALUES ($1, false, $2)
   RETURNING id, title
   `,
-  [title, req.user!.id]
-);
+        [title, req.user!.id]
+      );
 
-const quizId = result.rows[0].id;
+      const quizId = result.rows[0].id;
 
-await createLog({
-  action: "QUIZ_CREATED",
-  actorRole: req.user!.role,
-  actorId: req.user!.id,
-  targetType: "QUIZ",
-  targetId: quizId,
-  status: "SUCCESS",
-  message: "Quiz created as draft",
-  metadata: { title },
-});
+      await createLog({
+        action: "QUIZ_CREATED",
+        actorRole: req.user!.role,
+        actorId: req.user!.id,
+        targetType: "QUIZ",
+        targetId: quizId,
+        status: "SUCCESS",
+        message: "Quiz created as draft",
+        metadata: { title },
+      });
 
-res.status(201).json(result.rows[0]);
+      res.status(201).json(result.rows[0]);
 
     } catch (err) {
       console.error(err);
@@ -63,7 +63,7 @@ router.post(
   authenticate,
   allowRoles("ADMIN"),
   async (req: AuthRequest, res) => {
-    const { quizId, question, options, correctOption } = req.body;
+    const { quizId, question, options, correctOption, content } = req.body;
 
     if (
       !quizId ||
@@ -77,26 +77,36 @@ router.post(
 
     try {
       const quizCheck = await pool.query(
-  `SELECT id, is_active FROM quizzes WHERE id = $1`,
-  [quizId]
-);
+        `SELECT id, is_active FROM quizzes WHERE id = $1`,
+        [quizId]
+      );
 
-if (quizCheck.rows[0].is_active) {
-  return res.status(400).json({
-    message: "Cannot add questions after quiz is published"
-  });
-}
+      if (quizCheck.rows[0].is_active) {
+        return res.status(400).json({
+          message: "Cannot add questions after quiz is published"
+        });
+      }
 
 
       const correctHash = hashAnswer(correctOption);
 
       await pool.query(
         `INSERT INTO questions
-         (quiz_id, question_text, option_a, option_b, option_c, option_d, correct_answer_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+   (
+     quiz_id,
+     question_text,
+     content,
+     option_a,
+     option_b,
+     option_c,
+     option_d,
+     correct_answer_hash
+   )
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           quizId,
           question,
+          content ?? null,
           options[0],
           options[1],
           options[2],
@@ -104,6 +114,7 @@ if (quizCheck.rows[0].is_active) {
           correctHash
         ]
       );
+
 
       res.status(201).json({ message: "Question added" });
     } catch {
@@ -128,9 +139,9 @@ router.patch(
       });
     }
 
-   const publishTime = new Date(
-  new Date(publishAt).toISOString()
-);
+    const publishTime = new Date(
+      new Date(publishAt).toISOString()
+    );
 
 
     if (isNaN(publishTime.getTime())) {
@@ -174,7 +185,7 @@ router.patch(
         `,
         [publishTime, visibleUntil, targetClass, quizId]
       );
-      
+
 
       return res.json({
         message: "Quiz scheduled successfully",
@@ -204,20 +215,54 @@ router.get(
 
     try {
       const result = await pool.query(
-        `SELECT id, question_text,
-                option_a, option_b, option_c, option_d
-         FROM questions
-         WHERE quiz_id = $1
-         ORDER BY id`,
+        `SELECT
+          id,
+          question_text,
+          content,
+          option_a,
+          option_b,
+          option_c,
+          option_d,
+          correct_answer_hash
+        FROM questions
+        WHERE quiz_id = $1
+        ORDER BY id`,
         [quizId]
       );
 
-      res.json(result.rows);
-    } catch {
+      const questions = result.rows.map((q: any) => {
+        let correct_option: "A" | "B" | "C" | "D" | null = null;
+
+        if (hashAnswer(q.option_a) === q.correct_answer_hash) {
+          correct_option = "A";
+        } else if (hashAnswer(q.option_b) === q.correct_answer_hash) {
+          correct_option = "B";
+        } else if (hashAnswer(q.option_c) === q.correct_answer_hash) {
+          correct_option = "C";
+        } else if (hashAnswer(q.option_d) === q.correct_answer_hash) {
+          correct_option = "D";
+        }
+
+        return {
+          id: q.id,
+          question_text: q.question_text,
+          content: q.content,
+          option_a: q.option_a,
+          option_b: q.option_b,
+          option_c: q.option_c,
+          option_d: q.option_d,
+          correct_option, // ✅ THIS IS WHAT FRONTEND NEEDS
+        };
+      });
+
+      res.json(questions);
+    } catch (err) {
+      console.error(err);
       res.status(500).json({ message: "Failed to fetch questions" });
     }
   }
 );
+
 /**
  * UPDATE QUESTION
  */
@@ -353,15 +398,15 @@ router.delete(
   async (req: AuthRequest, res) => {
     const quizId = Number(req.params.id);
     const quiz = await pool.query(
-  "SELECT is_active FROM quizzes WHERE id = $1",
-  [quizId]
-);
+      "SELECT is_active FROM quizzes WHERE id = $1",
+      [quizId]
+    );
 
-if (quiz.rows[0]?.is_active) {
-  return res.status(400).json({
-    message: "Published quiz cannot be deleted"
-  });
-}
+    if (quiz.rows[0]?.is_active) {
+      return res.status(400).json({
+        message: "Published quiz cannot be deleted"
+      });
+    }
 
     try {
       // Prevent delete if students attempted quiz
@@ -387,14 +432,14 @@ if (quiz.rows[0]?.is_active) {
         [quizId]
       );
       await createLog({
-  action: "QUIZ_DELETED",
-  actorRole: req.user!.role,
-  actorId: req.user!.id,
-  targetType: "QUIZ",
-  targetId: quizId,
-  status: "SUCCESS",
-  message: "Quiz deleted",
-});
+        action: "QUIZ_DELETED",
+        actorRole: req.user!.role,
+        actorId: req.user!.id,
+        targetType: "QUIZ",
+        targetId: quizId,
+        status: "SUCCESS",
+        message: "Quiz deleted",
+      });
 
 
       res.json({ message: "Quiz deleted" });
@@ -496,19 +541,32 @@ router.get(
   authenticate,
   allowRoles("ADMIN"),
   async (req, res) => {
-    const quizzes = await pool.query(`
-      SELECT q.*,
-      EXISTS (
-        SELECT 1 FROM results r WHERE r.quiz_id = q.id
-      ) AS has_submissions
-      FROM quizzes q
-      ORDER BY q.created_at DESC
-    `);
-    res.json(quizzes.rows);
+    try {
+      const quizzes = await pool.query(`
+        SELECT 
+          q.*,
+
+          -- does quiz have submissions?
+          EXISTS (
+            SELECT 1 
+            FROM results r 
+            WHERE r.quiz_id = q.id
+          ) AS has_submissions,
+
+          -- 🔥 number of questions
+          COUNT(ques.id)::int AS question_count
+
+        FROM quizzes q
+        LEFT JOIN questions ques ON ques.quiz_id = q.id
+        GROUP BY q.id
+        ORDER BY q.created_at DESC
+      `);
+      res.json(quizzes.rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to fetch quizzes" });
+    }
   }
 );
-
-
-
 
 export default router;

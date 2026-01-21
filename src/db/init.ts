@@ -34,18 +34,26 @@ export const initDB = async () => {
     `);
 
     // QUESTIONS
+    // QUESTIONS
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS questions (
-        id SERIAL PRIMARY KEY,
-        quiz_id INT REFERENCES quizzes(id) ON DELETE CASCADE,
-        question_text TEXT NOT NULL,
-        option_a TEXT NOT NULL,
-        option_b TEXT NOT NULL,
-        option_c TEXT NOT NULL,
-        option_d TEXT NOT NULL,
-        correct_answer_hash TEXT NOT NULL
-      );
-    `);
+  CREATE TABLE IF NOT EXISTS questions (
+    id SERIAL PRIMARY KEY,
+    quiz_id INT REFERENCES quizzes(id) ON DELETE CASCADE,
+
+    -- legacy (keep)
+    question_text TEXT NOT NULL,
+
+    -- new rich content (optional)
+    content JSONB,
+
+    option_a TEXT NOT NULL,
+    option_b TEXT NOT NULL,
+    option_c TEXT NOT NULL,
+    option_d TEXT NOT NULL,
+    correct_answer_hash TEXT NOT NULL
+  );
+`);
+
 
     // STUDENT ANSWERS
     await pool.query(`

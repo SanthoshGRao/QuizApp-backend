@@ -135,11 +135,11 @@ router.post("/login", async (req, res) => {
     const isMatch = await comparePassword(password, user.password_hash);
     if (!isMatch) {
       await createLog({
-  action: "LOGIN",
-  actorRole: "UNKNOWN",
-  status: "FAILED",
-  message: `Login failed for ${normalizedEmail}`,
-});
+        action: "LOGIN",
+        actorRole: "UNKNOWN",
+        status: "FAILED",
+        message: `Login failed for ${normalizedEmail}`,
+      });
 
       return res.status(401).json({ message: "Invalid credentials" });
     }
